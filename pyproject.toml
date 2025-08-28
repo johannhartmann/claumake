@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "claumake"
+version = "0.1.0"
+description = "CLI to synthesize build artifacts (Makefiles, plan.json, compose) from repos"
+readme = "README.md"
+authors = [{name = "claumake"}]
+keywords = ["docker", "compose", "make", "ci", "github-actions", "build"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Environment :: Console",
+  "Topic :: Software Development :: Build Tools",
+]
+requires-python = ">=3.9"
+dependencies = [
+  # Always install Claude Code Python SDK for plan synthesis and self-heal
+  "claude-code-sdk @ git+https://github.com/anthropics/claude-code-sdk-python",
+]
+
+[project.optional-dependencies]
+actions = ["PyYAML>=6.0"]
+dev = [
+  "pytest>=7.0",
+  "pytest-cov>=4.0",
+  "ruff>=0.4.0",
+  "mypy>=1.6.0",
+  "types-PyYAML>=6.0.12.20240808",
+]
+
+[project.urls]
+Homepage = "https://example.invalid/claumake"
+Repository = "https://example.invalid/claumake/repo"
+
+[project.scripts]
+claumake = "claumake.cli:main"
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+extend-select = ["E", "F", "I"]
+
+[tool.mypy]
+python_version = "3.9"
+strict = false
+warn_return_any = true
+warn_unused_ignores = true
+ignore_missing_imports = true
+
+[tool.uv]
+dev-dependencies = [
+  "pytest>=7.0",
+  "pytest-cov>=4.0",
+  "ruff>=0.4.0",
+  "mypy>=1.6.0",
+  "types-PyYAML>=6.0.12.20240808",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["claumake*"]
+exclude = ["tests*", "repos*", "examples*", "docs*", ".github*"]

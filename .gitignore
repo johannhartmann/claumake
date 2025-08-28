@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.Python
+.venv/
+venv/
+env/
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+.pytype/
+.nox/
+.tox/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Coverage/pytest
+.coverage
+.coverage.*
+.pytest_cache/
+htmlcov/
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Repo outputs
+.claude/
+compose.yaml
+Dockerfile
+Makefile.build
+Makefile.claude
+repos/
+.env
+.env.*

@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ "**" ]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.12"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies (dev + actions)
+        run: |
+          uv pip install -e .[dev,actions]
+
+      - name: Lint (ruff)
+        run: |
+          ruff --version
+          ruff check .
+
+      - name: Type-check (mypy)
+        run: |
+          mypy --version
+          mypy claumake
+
+      - name: Tests (pytest)
+        run: |
+          pytest -q --cov=claumake --cov-report=term-missing
+
+      - name: Build package
+        run: |
+          uv pip install build
+          python -m build
