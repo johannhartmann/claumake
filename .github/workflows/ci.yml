@@ -53,7 +53,7 @@ jobs:
 
       - name: Tests (pytest)
         run: |
-          pytest -q --cov=claumake --cov-report=term-missing --cov-fail-under=20
+          pytest -q --cov=claumake --cov-report=term-missing --cov-fail-under=25
 
       - name: Build package
         run: |
