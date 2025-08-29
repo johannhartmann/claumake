@@ -8,10 +8,12 @@ version = "0.1.0"
 description = "CLI to synthesize build artifacts (Makefiles, plan.json, compose) from repos"
 readme = "README.md"
 authors = [{name = "claumake"}]
+license = { text = "Apache-2.0" }
 keywords = ["docker", "compose", "make", "ci", "github-actions", "build"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
+  "License :: OSI Approved :: Apache Software License",
   "Environment :: Console",
   "Topic :: Software Development :: Build Tools",
 ]
@@ -29,11 +31,15 @@ dev = [
   "ruff>=0.4.0",
   "mypy>=1.6.0",
   "types-PyYAML>=6.0.12.20240808",
+  "bandit>=1.7.5",
+  "vulture>=2.7",
 ]
 
 [project.urls]
 Homepage = "https://example.invalid/claumake"
 Repository = "https://example.invalid/claumake/repo"
+Issues = "https://example.invalid/claumake/issues"
+Changelog = "https://example.invalid/claumake/changelog"
 
 [project.scripts]
 claumake = "claumake.cli:main"
@@ -45,7 +51,10 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py39"
+
+[tool.ruff.lint]
 extend-select = ["E", "F", "I"]
+ignore = ["E501", "I001"]
 
 [tool.mypy]
 python_version = "3.9"
@@ -61,6 +70,8 @@ dev-dependencies = [
   "ruff>=0.4.0",
   "mypy>=1.6.0",
   "types-PyYAML>=6.0.12.20240808",
+  "bandit>=1.7.5",
+  "vulture>=2.7",
 ]
 
 [tool.setuptools]

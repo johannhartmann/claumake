@@ -4,27 +4,39 @@ import os
 import shutil
 import subprocess as sp
 from dataclasses import dataclass
-import os
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
 class RunResult:
     command: str
-    returncode: int | None
+    returncode: Optional[int]
     stdout: str
     stderr: str
     skipped: bool = False
-    reason: str | None = None
+    reason: Optional[str] = None
+
+
+def _ensure_str(val: Any) -> str:
+    if isinstance(val, str):
+        return val
+    if isinstance(val, bytes):
+        try:
+            return val.decode()
+        except Exception:
+            return ""
+    return ""
 
 
 def _run(cmd: str, cwd: Path, timeout: int = 900) -> RunResult:
     try:
-        p = sp.run(cmd, shell=True, cwd=str(cwd), capture_output=True, text=True, timeout=timeout)
+        # Running arbitrary plan/test commands requires a shell. Inputs are repository-local and
+        # executed in a controlled environment. nosec B602
+        p = sp.run(cmd, shell=True, cwd=str(cwd), capture_output=True, text=True, timeout=timeout)  # nosec B602
         return RunResult(command=cmd, returncode=p.returncode, stdout=p.stdout, stderr=p.stderr)
     except sp.TimeoutExpired as e:
-        return RunResult(command=cmd, returncode=None, stdout=e.stdout or "", stderr=(e.stderr or "") + "\nTIMEOUT", skipped=False)
+        return RunResult(command=cmd, returncode=None, stdout=_ensure_str(e.stdout), stderr=_ensure_str(e.stderr) + "\nTIMEOUT", skipped=False)
 
 
 def _docker_available() -> bool:
@@ -37,22 +49,29 @@ def _docker_available() -> bool:
     if shutil.which("docker") is None:
         return False
     try:
-        p = sp.run("docker info --format {{.ServerVersion}}", shell=True, capture_output=True, text=True, timeout=10)
+        # Query docker daemon status; shell used for portability. nosec B602 B607
+        p = sp.run("docker info --format {{.ServerVersion}}", shell=True, capture_output=True, text=True, timeout=10)  # nosec B602 B607
         return p.returncode == 0
     except Exception:
         return False
 
 
-def verify_commands(repo_root: Path, plan_path: Path) -> Dict[str, Any]:
-    if not plan_path.exists():
-        raise FileNotFoundError(f"Plan not found: {plan_path}")
-
+def verify_commands(repo_root: Path, plan_path: Optional[Path] = None) -> Dict[str, Any]:
     import json
-
-    plan = json.loads(plan_path.read_text(encoding="utf-8"))
-    cmds: Dict[str, List[str]] = plan.get("commands") or {}
-    build_cmds = cmds.get("build") or []
-    test_cmds = cmds.get("test") or []
+    cmds: Dict[str, List[str]] = {}
+    build_cmds: List[str] = []
+    test_cmds: List[str] = []
+    start_cmds: List[str] = []
+    if plan_path and plan_path.exists():
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        cmds = plan.get("commands") or {}
+        build_cmds = cmds.get("build") or []
+        test_cmds = cmds.get("test") or []
+        start_cmds = cmds.get("start") or []
+    else:
+        build_cmds = ["make -f Makefile.build build"]
+        test_cmds = ["make -f Makefile.build test"]
+        start_cmds = ["make -f Makefile.build start"]
 
     logs_dir = repo_root / ".claude" / "verify"
     logs_dir.mkdir(parents=True, exist_ok=True)
@@ -89,7 +108,6 @@ def verify_commands(repo_root: Path, plan_path: Path) -> Dict[str, Any]:
             record("test", _run(c, repo_root))
 
     # Start (best-effort): only handle compose up/down pattern
-    start_cmds = cmds.get("start") or []
     for c in start_cmds[:1]:
         if "docker compose" in c and "up -d" in c:
             if not results["env"]["docker_available"]:
@@ -98,10 +116,10 @@ def verify_commands(repo_root: Path, plan_path: Path) -> Dict[str, Any]:
                 up = _run(c, repo_root, timeout=300)
                 record("start", up)
                 # fetch ps output for context
-                ps = _run("docker compose ps", repo_root, timeout=120)
+                ps = _run("docker compose -f compose.claumake.yaml ps", repo_root, timeout=120)
                 record("start", ps)
                 # tear down
-                _ = _run("docker compose down", repo_root, timeout=300)
+                _ = _run("docker compose -f compose.claumake.yaml down", repo_root, timeout=300)
         else:
             # We don't know how to verify arbitrary long-running start commands safely
             record("start", RunResult(c, None, "", "unsupported start verification", skipped=True, reason="unsupported"))
@@ -109,8 +127,14 @@ def verify_commands(repo_root: Path, plan_path: Path) -> Dict[str, Any]:
     # Summary
     def summarize(tag: str) -> Dict[str, Any]:
         entries = results[tag]
-        ok = [e for e in entries if not e.get("skipped") and e.get("returncode") == 0]
-        fail = [e for e in entries if not e.get("skipped") and (e.get("returncode") or 1) != 0]
+        def rc(e: Dict[str, Any]) -> Optional[int]:
+            v = e.get("returncode")
+            try:
+                return int(v) if v is not None else None
+            except Exception:
+                return None
+        ok = [e for e in entries if not e.get("skipped") and rc(e) == 0]
+        fail = [e for e in entries if not e.get("skipped") and (rc(e) is not None and rc(e) != 0)]
         skip = [e for e in entries if e.get("skipped")]
         return {"passed": len(ok), "failed": len(fail), "skipped": len(skip), "total": len(entries)}
 

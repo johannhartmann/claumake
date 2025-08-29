@@ -36,7 +36,7 @@ def _list_files(root: Path, patterns: List[str]) -> List[str]:
             if p.is_file():
                 try:
                     out.append(str(p.relative_to(root)))
-                except Exception:
+                except ValueError:
                     out.append(str(p))
     return sorted(set(out))
 
@@ -72,7 +72,7 @@ def scan_context(repo_root: Path) -> Dict:
         try:
             text = p.read_text(encoding="utf-8", errors="ignore")
             candidates.extend(_extract_commands_from_text(text))
-        except Exception:
+        except (OSError, UnicodeDecodeError):
             continue
 
     # Extract simple Makefile targets that run tests/build
@@ -83,7 +83,8 @@ def scan_context(repo_root: Path) -> Dict:
                 s = line.strip()
                 if s and not s.startswith("#") and re.search(r"(npm|pnpm|yarn|pytest|pip|mvn|gradle|go|cargo)\b", s):
                     candidates.append(s)
-        except Exception:
+        except (OSError, UnicodeDecodeError):
+            # If Makefile cannot be read, skip without failing
             pass
 
     return {
@@ -91,4 +92,3 @@ def scan_context(repo_root: Path) -> Dict:
         "manifests": manifests,
         "readme_commands": candidates[:100],
     }
-

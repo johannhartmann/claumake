@@ -34,6 +34,18 @@ jobs:
           ruff --version
           ruff check .
 
+      - name: Security (bandit)
+        run: |
+          bandit --version || true
+          bandit -q -r claumake -x tests
+        continue-on-error: true
+
+      - name: Dead code (vulture)
+        run: |
+          vulture --version || true
+          vulture claumake --min-confidence 80
+        continue-on-error: true
+
       - name: Type-check (mypy)
         run: |
           mypy --version
@@ -41,7 +53,7 @@ jobs:
 
       - name: Tests (pytest)
         run: |
-          pytest -q --cov=claumake --cov-report=term-missing
+          pytest -q --cov=claumake --cov-report=term-missing --cov-fail-under=20
 
       - name: Build package
         run: |

@@ -1,9 +1,9 @@
 SHELL := /bin/bash
 
-.PHONY: help setup lint type fmt test build clean
+.PHONY: help setup lint type fmt test build clean security deadcode qa
 
 help:
-	@echo "Dev targets: setup lint type fmt test build clean"
+	@echo "Dev targets: setup lint type fmt test build clean security deadcode qa"
 
 setup:
 	@which uv >/dev/null 2>&1 && \
@@ -29,3 +29,10 @@ build:
 clean:
 	git clean -xfd -e node_modules -e .venv -e venv -e .tox
 
+security:
+	bandit -q -r claumake -x tests || true
+
+deadcode:
+	vulture claumake --min-confidence 80 || true
+
+qa: lint type security deadcode test

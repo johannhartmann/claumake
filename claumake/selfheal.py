@@ -5,12 +5,10 @@ import os
 import shutil
 import subprocess as sp
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Tuple, Optional, Callable, cast
 
-from .gen.makefile import generate_makefiles
-from .gen.compose import maybe_generate_compose
+from .claudeutil import repair_files
 from .verifier import verify_commands
-from .claudeutil import refine_plan
 
 
 def _claude_available() -> bool:
@@ -18,7 +16,7 @@ def _claude_available() -> bool:
 
 
 def _load_json(path: Path) -> Dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
+    return cast(Dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
 
 
 def _save_json(path: Path, data: Dict[str, Any]) -> None:
@@ -75,16 +73,19 @@ def _build_prompt(plan: Dict[str, Any], verify_report: Dict[str, Any]) -> str:
     )
 
 
-def _run_claude(prompt: str, cwd: Path) -> tuple[Dict[str, Any], str | None]:
+def _run_claude(prompt: str, cwd: Path) -> Tuple[Dict[str, Any], Optional[str]]:
     # Expect the claude CLI to output a JSON object; if it wraps result, unwrap.
     # Ensure claude CLI can write config in sandbox by overriding HOME within repo
     env = os.environ.copy()
     home_dir = cwd / ".claude" / "home"
     home_dir.mkdir(parents=True, exist_ok=True)
     env["HOME"] = str(home_dir)
+    exe = shutil.which("claude")
+    if not exe:
+        raise RuntimeError("'claude' CLI not found on PATH")
     proc = sp.run(
         [
-            "claude",
+            exe,
             "-p",
             prompt,
             "--output-format",
@@ -115,13 +116,13 @@ def _run_claude(prompt: str, cwd: Path) -> tuple[Dict[str, Any], str | None]:
                     if "plan" in inner:
                         return inner["plan"], (inner.get("explain") or None)
                     return inner, None
-            except Exception:
+            except (ValueError, TypeError):
                 pass
         if isinstance(data, dict):
             if "plan" in data:
                 return data["plan"], (data.get("explain") or None)
             return data, None
-    except Exception:
+    except (ValueError, TypeError):
         pass
     # If parsing fails, include stderr for debugging
     raise RuntimeError(f"claude output not parseable JSON. stderr={proc.stderr[:400]}\nout={out[:400]}")
@@ -129,16 +130,16 @@ def _run_claude(prompt: str, cwd: Path) -> tuple[Dict[str, Any], str | None]:
 
 def self_heal_until_green(
     repo_root: Path,
-    plan_path: Path,
-    max_iter: int = 3,
-    on_event: callable | None = None,
+    plan_path: Optional[Path],
+    max_iter: int = 20,
+    on_event: Optional[Callable[[str, Dict[str, Any]], None]] = None,
 ) -> Dict[str, Any]:
     repo_root = Path(repo_root)
-    plan_path = Path(plan_path)
+    plan_path = Path(plan_path) if plan_path else None
     # verify initial
     if on_event:
         on_event("verify_initial", {})
-    last_report = verify_commands(repo_root, plan_path)
+    last_report = verify_commands(repo_root)
 
     def passed(rep: Dict[str, Any]) -> bool:
         # Tight criteria: build and test must have at least one executed and passed, and zero failed.
@@ -187,36 +188,16 @@ def self_heal_until_green(
                 },
             }
             on_event("heal_iteration_start", {"iteration": it, "reason": reason})
-        new_plan = None
-        if _claude_available():
-            # Load plan
-            plan = _load_json(plan_path)
-            # Build payload with current plan and verification report only; Claude will inspect repo as needed.
-            payload = {
-                "plan": {k: plan[k] for k in plan if not k.startswith("_")},
-                "verify": last_report,
-            }
-            try:
-                new_plan = refine_plan(repo_root, payload)
-            except Exception as e:
-                if on_event:
-                    on_event("heal_claude_error", {"error": str(e)[:200]})
-        else:
+        # Ask Claude to repair files directly (streaming)
+        try:
+            repair_files(repo_root, last_report)
+        except Exception as e:
             if on_event:
-                on_event("heal_no_claude", {})
-        if new_plan is None:
-            # Could not obtain a refined plan from Claude; abort healing
+                on_event("heal_claude_error", {"error": str(e)[:200]})
             break
-        # Ensure minimal schema fields are present
-        new_plan.setdefault("version", "1")
-        new_plan.setdefault("commands", {"build": [], "start": [], "test": []})
-        _save_json(plan_path, new_plan)
-        # Regenerate artifacts and re-verify
-        generate_makefiles(new_plan, repo_root)
-        # Force regeneration to apply changes (ports, poetry, etc.)
-        maybe_generate_compose(new_plan, repo_root, force=True)
+        # Re-verify after Claude's edits
         if on_event:
             on_event("heal_iteration_done", {"iteration": it})
-        last_report = verify_commands(repo_root, plan_path)
+        last_report = verify_commands(repo_root)
 
     return last_report

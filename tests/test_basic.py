@@ -1,23 +1,11 @@
 from __future__ import annotations
 
+import importlib.util
 import json
-from pathlib import Path
-import sys
-
-# Ensure project root on sys.path for direct imports
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
 import os
-os.environ.setdefault("CLAUMAKE_DEV_ALLOW_HEURISTIC_FALLBACK", "1")
-import pytest
-try:
-    from claude_sdk import ClaudeSDKClient  # type: ignore
-    SDK_AVAILABLE = True
-except Exception:
-    SDK_AVAILABLE = False
+from pathlib import Path
 
+import pytest
 from claumake.cli import cmd_generate
 
 
@@ -56,12 +44,11 @@ def test_generate_from_minimal_plan(tmp_path: Path) -> None:
     # artifacts
     assert (tmp_path / "Makefile.build").exists()
     assert (tmp_path / "Makefile.claude").exists()
-    # a compose file and Dockerfile should be generated since none existed
-    assert (tmp_path / "compose.yaml").exists()
-    assert (tmp_path / "Dockerfile").exists()
+    # a compose file and Dockerfile should be generated since none existed (non-invasive names)
+    assert (tmp_path / "compose.claumake.yaml").exists()
+    assert (tmp_path / "Dockerfile.claumake").exists()
 
-import os as _os
-_sdk_and_key = SDK_AVAILABLE and bool(_os.environ.get("ANTHROPIC_API_KEY"))
+_sdk_and_key = importlib.util.find_spec("claude_sdk") is not None and bool(os.environ.get("ANTHROPIC_API_KEY"))
 
 @pytest.mark.skipif(not _sdk_and_key, reason="Claude SDK or ANTHROPIC_API_KEY not available")
 def test_plan_with_sdk(tmp_path: Path) -> None:

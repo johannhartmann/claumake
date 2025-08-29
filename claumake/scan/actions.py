@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-import base64
-import json
 import re
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Any, Dict, List
 
 
 def _safe_yaml_load(text: str) -> Any:
     try:
-        import yaml  # type: ignore
+        import yaml  # noqa: F401
 
         return yaml.safe_load(text)
     except Exception:
@@ -109,4 +107,3 @@ def parse_actions(repo_root: Path) -> Dict[str, Any]:
         "errors": errors,
     }
     return signals
-

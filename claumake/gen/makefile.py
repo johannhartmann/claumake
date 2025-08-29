@@ -5,7 +5,7 @@ from typing import Any, Dict, List
 
 
 BUILD_TEMPLATE = """SHELL := /bin/bash
-COMPOSE ?= docker compose
+COMPOSE ?= docker compose -f compose.claumake.yaml
 SERVICE ?= app
 
 .PHONY: help build start stop logs test lint fmt clean compose-up compose-down
@@ -84,11 +84,12 @@ def generate_makefiles(plan: Dict[str, Any], out_dir: Path) -> None:
     commands = plan.get("commands", {}) or {}
     build_cmd = _first_or_default(commands.get("build", []), "$(COMPOSE) build")
     start_cmd = _first_or_default(commands.get("start", []), "$(COMPOSE) up -d")
-    test_cmd = _compose_wrapped(_first_or_default(commands.get("test", []), "npm test"))
+    # Default: require Claude to provide a test command; fail fast if missing
+    test_cmd = _compose_wrapped(_first_or_default(commands.get("test", []), "false"))
 
     # extras
-    lint_cmd = _compose_wrapped("npm run lint")
-    fmt_cmd = _compose_wrapped("npm run fmt")
+    lint_cmd = _compose_wrapped("echo 'no lint configured' || true")
+    fmt_cmd = _compose_wrapped("echo 'no fmt configured' || true")
 
     mf_build = BUILD_TEMPLATE.format(
         build_cmd=build_cmd,
@@ -103,7 +104,8 @@ def generate_makefiles(plan: Dict[str, Any], out_dir: Path) -> None:
 
 
 def main() -> None:
-    import argparse, json
+    import argparse
+    import json
 
     ap = argparse.ArgumentParser(description="Generate Makefiles from plan.json")
     ap.add_argument("--plan", required=True)

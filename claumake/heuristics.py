@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Dict, Any, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 
 
 LANG_DEFAULT_PORTS = {
@@ -31,7 +31,7 @@ def _detect_language(manifests: List[str]) -> str:
 
 def _compose_presence(repo_root: Path, manifests: List[str]) -> Tuple[Dict[str, Any], List[str]]:
     notes: List[str] = []
-    compose = {"present": False}
+    compose: Dict[str, Any] = {"present": False}
     for fname in ["compose.yaml", "compose.yml", "docker-compose.yml", "docker-compose.yaml"]:
         p = repo_root / fname
         if p.exists():
@@ -58,7 +58,7 @@ def _commands_from_actions(actions: Dict[str, Any]) -> List[str]:
     return cmds
 
 
-def _guess_test_command(language: str, commands: List[str]) -> str | None:
+def _guess_test_command(language: str, commands: List[str]) -> Optional[str]:
     # Prefer explicit test commands found in workflows
     for c in commands:
         if re.search(r"\b(npm|pnpm|yarn)\b.*\btest\b", c):
@@ -81,7 +81,7 @@ def _guess_test_command(language: str, commands: List[str]) -> str | None:
     }.get(language)
 
 
-def _guess_build_command(language: str, commands: List[str]) -> str | None:
+def _guess_build_command(language: str, commands: List[str]) -> Optional[str]:
     for c in commands:
         if re.search(r"\b(npm|pnpm|yarn)\b.*\b(build|compile)\b", c):
             return c
@@ -113,7 +113,7 @@ def _guess_lint_fmt(language: str, commands: List[str]) -> tuple[list[str], list
     return lint[:3], fmt[:3]
 
 
-def _extract_exposed_port(repo_root: Path) -> int | None:
+def _extract_exposed_port(repo_root: Path) -> Optional[int]:
     dfile = repo_root / "Dockerfile"
     if dfile.exists():
         try:
@@ -121,8 +121,8 @@ def _extract_exposed_port(repo_root: Path) -> int | None:
             m = re.search(r"^\s*EXPOSE\s+(\d+)", text, re.MULTILINE)
             if m:
                 return int(m.group(1))
-        except Exception:
-            pass
+        except (OSError, UnicodeDecodeError, ValueError):
+            return None
     return None
 
 

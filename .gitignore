@@ -37,7 +37,10 @@ Thumbs.db
 # Repo outputs
 .claude/
 compose.yaml
+docker-compose.yml
+compose.claumake.yaml
 Dockerfile
+Dockerfile.claumake
 Makefile.build
 Makefile.claude
 repos/

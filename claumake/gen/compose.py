@@ -1,66 +1,52 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 def _compose_yaml(service_name: str, port_map: str) -> str:
-    return f"""# generated-by: claumake
-services:
-  {service_name}:
-    build: .
-    ports:
-      - "{port_map}"
-    environment: []
-"""
+    return (
+        "# generated-by: claumake\n"
+        "services:\n"
+        f"  {service_name}:\n"
+        "    build:\n"
+        "      context: .\n"
+        "      dockerfile: Dockerfile.claumake\n"
+        "    ports:\n"
+        f"      - \"{port_map}\"\n"
+        "    environment: []\n"
+    )
 
 
-def _dockerfile(language: str, port: int | None) -> str:
-    if language == "node":
-        base = "node:20-alpine"
-        expose = f"\nEXPOSE {port}" if port else ""
-        return f"""FROM {base}
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --omit=dev || npm install --omit=dev
-COPY . .
-{f'EXPOSE {port}' if port else ''}
-CMD ["npm","start"]
-"""
-    if language == "python":
-        return f"""FROM python:3.12-slim
-WORKDIR /app
-COPY requirements.txt* ./
-RUN pip install -r requirements.txt || true
-COPY . .
-{f'EXPOSE {port}' if port else ''}
-CMD ["python","-m","http.server","{port or 8000}"]
-"""
-    # generic
-    return """FROM alpine:3.19
-WORKDIR /app
-COPY . .
-CMD ["sh","-c","echo 'Add a proper Dockerfile' && sleep 1"]
-"""
+def _dockerfile(language: str, port: Optional[int]) -> str:
+    # Minimal base; Claude is expected to synthesize a proper Dockerfile in the plan.
+    # We generate a simple placeholder to keep Compose valid if the plan omitted it.
+    return (
+        "FROM alpine:3.19\n"
+        "WORKDIR /app\n"
+        "COPY . .\n"
+        "CMD [\"sh\",\"-c\",\"echo 'Add a proper Dockerfile via claumake/Claude plan' && sleep 1\"]\n"
+    )
 
 
 def maybe_generate_compose(plan: Dict[str, Any], out_dir: Path, force: bool = False) -> None:
     compose = plan.get("compose") or {}
     present = compose.get("present")
-    file_name = compose.get("file", "compose.yaml")
+    # Always generate to non-invasive filename to avoid clobbering existing files
+    file_name = "compose.claumake.yaml"
     services = compose.get("services") or []
 
     compose_path = out_dir / file_name
-    dockerfile_path = out_dir / "Dockerfile"
+    dockerfile_path = out_dir / "Dockerfile.claumake"
 
-    if present and compose_path.exists() and not force:
+    if present and (out_dir / (compose.get("file") or "compose.yaml")).exists() and not force:
         return
 
     # Generate minimal compose if absent
     port_map = None
     if services:
         svc = services[0]
-        ports = (svc.get("ports") or [":"])  # type: ignore
+        ports = (svc.get("ports") or [":"])
         port_map = ports[0]
     if not port_map:
         port_map = "3000:3000"
